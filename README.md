@@ -1,19 +1,19 @@
 
+# 🎲 GovernedLotteryHook Contract (with Governance)
 
-# 🎲 GovernedLotteryHook Contract
-
-The `GovernedLotteryHook` is a smart contract built on top of the Balancer V3 protocol to act as a customizable fee hook during token swaps. The unique feature of this contract is the lottery mechanism embedded into its logic. Whenever a swap happens, there's a chance for users to win accumulated fees if a lucky number is drawn.
+The `GovernedLotteryHook` contract is an advanced smart contract that integrates a lottery mechanism with governance features. It serves as a hook for token swaps within the Balancer V3 protocol, adding a fun and community-driven layer to the swap process through a lottery system, while also allowing the community or contract owner to govern key parameters such as the swap fee and lucky number.
 
 ## 🔑 Key Features
 
-- **Swap Fee Hook**: A fee can be applied to every swap, with adjustable percentages controlled by the contract owner.
-- **Lottery Mechanism**: For every swap, a random number is drawn. If the number matches the predefined lucky number, the user wins the accumulated fees.
-- **Trusted Router**: Only swaps routed through a trusted router are eligible for the lottery.
-- **Accrued Fees**: Accrued fees are stored in the contract until a lottery winner is drawn.
+- **Swap Fee Hook**: The contract allows a percentage-based swap fee to be applied to every token swap, which can be adjusted via governance.
+- **Lottery System**: Users participate in a lottery on each swap. If a lucky number is drawn, the user wins the accrued fees.
+- **Governance Proposals**: The contract includes a governance mechanism where proposals for key parameter changes (e.g., fee percentage, lucky number) can be voted on by users.
+- **Trusted Router**: Only swaps executed through a specified trusted router can participate in the lottery.
+- **Accrued Fees**: The fees are collected and stored in the contract until a lottery winner is drawn.
 
 ## 📝 Contract Summary
 
-This contract implements several key features using Balancer’s `IHooks` and integrates with a trusted router for secure transactions. Below is a detailed breakdown of the main functionality.
+The contract is designed to serve as both a lottery mechanism for swaps and a governed system where proposals can be created, voted on, and implemented by the community or owner. 
 
 ### ⚙️ Constructor
 
@@ -21,23 +21,50 @@ This contract implements several key features using Balancer’s `IHooks` and in
 constructor(IVault vault, address router) VaultGuard(vault) Ownable(msg.sender)
 ```
 
-- **VaultGuard**: The contract is built around the Balancer vault system.
-- **Router**: The `router` address is set as the trusted router, which ensures that swaps from specific routes are the only ones eligible for the lottery mechanism.
+- **Vault**: The contract is deployed with a reference to the Balancer vault.
+- **Router**: The `router` is the trusted source of swaps that are eligible for the lottery.
 
-### 🔄 Hook-Related Functions
+### 🗳️ Governance
 
-#### `onRegister`
+The contract supports the creation, voting, and implementation of governance proposals. The governance proposals allow adjustments to important parameters, such as:
+
+- **Swap Fee Percentage** (`hookSwapFeePercentage`)
+- **Lucky Number** (`LUCKY_NUMBER`)
+
+#### `createProposal`
 
 ```solidity
-function onRegister(
-    address,
-    address pool,
-    TokenConfig[] memory,
-    LiquidityManagement calldata
-) public override onlyVault returns (bool)
+function createProposal(
+    string memory description, 
+    uint64 newSwapFeePercentage, 
+    uint8 newLuckyNumber
+) external onlyOwner
 ```
 
-This function is called when the hook is registered with a pool. It emits an event to confirm registration.
+- **Description**: A text description of the proposal.
+- **New Swap Fee Percentage**: The proposed new swap fee percentage.
+- **New Lucky Number**: The proposed new lucky number for the lottery.
+- **Owner Only**: Only the contract owner can create proposals.
+
+#### `voteOnProposal`
+
+```solidity
+function voteOnProposal(uint256 proposalId, bool support) external
+```
+
+- Users can vote either **for** or **against** a proposal.
+- Each address can only vote once per proposal.
+
+#### `implementProposal`
+
+```solidity
+function implementProposal(uint256 proposalId) external onlyOwner
+```
+
+- After the voting period ends, if the votes **for** the proposal exceed the votes **against**, the proposal is implemented.
+- The contract updates its parameters (`hookSwapFeePercentage` and `LUCKY_NUMBER`) based on the proposal’s contents.
+
+### 🎰 Lottery Mechanism
 
 #### `onAfterSwap`
 
@@ -47,71 +74,53 @@ function onAfterSwap(
 ) public override onlyVault returns (bool success, uint256 hookAdjustedAmountCalculatedRaw)
 ```
 
-- **AfterSwap Logic**: This is the core of the contract. It applies fees on swaps and triggers the lottery mechanism.
-- **Lottery**: Each time a swap is executed, a random number is generated. If the random number matches the lucky number, the user wins the accrued fees stored in the contract.
-- **Fee Collection**: The contract collects a swap fee (if set) for every transaction and stores it in the `_tokensWithAccruedFees` map for potential winners.
-
-### 💸 Fees & Lottery
-
-#### `setHookSwapFeePercentage`
-
-```solidity
-function setHookSwapFeePercentage(uint64 swapFeePercentage) external onlyOwner
-```
-
-This function allows the contract owner to set the swap fee percentage (in basis points). The fees will be collected on every swap, and the amount collected can be adjusted.
-
-#### `getRandomNumber`
-
-```solidity
-function getRandomNumber() external view returns (uint8)
-```
-
-This view function returns the generated random number used in the lottery system. This random number is based on the block's randomness and the internal counter.
+- This is the core function of the lottery. It is triggered after every swap.
+- The contract draws a random number for each swap.
+- If the random number matches the **lucky number**, the user wins the accrued fees.
 
 #### `_chargeFeeOrPayWinner`
 
 ```solidity
 function _chargeFeeOrPayWinner(
-    address router,
-    uint8 drawnNumber,
-    IERC20 token,
+    address router, 
+    uint8 drawnNumber, 
+    IERC20 token, 
     uint256 hookFee
 ) private returns (uint256)
 ```
 
-- If the drawn number matches the lucky number, the user wins the accumulated fees.
-- If the drawn number does not match, the accrued fees are stored in `_tokensWithAccruedFees`, and the hook fee is sent to the contract.
+- If the random number equals the **lucky number**, the user wins the accrued fees for all eligible tokens.
+- If the drawn number does not match, the fees are collected and stored in `_tokensWithAccruedFees` for future lottery payouts.
 
-### 🎰 Lottery Parameters
+### 🔄 Adjustable Parameters
 
-- **LUCKY_NUMBER**: `10` – The predefined lucky number.
-- **MAX_NUMBER**: `20` – The range of possible numbers (1 to 20).
-- **hookSwapFeePercentage**: The fee applied to each swap, which can be adjusted by the owner.
+- **Lucky Number**: The lucky number is initially set to `10` and can be changed via governance proposals.
+- **Swap Fee Percentage**: The swap fee percentage can be set by the owner and changed via governance proposals. This determines the fee charged on each swap.
 
-### 🔐 Security & Access Control
+### 🔒 Security & Access Control
 
-The contract is owned by a single owner (set during deployment), who can adjust the fee percentage.
-
-- **Ownable**: The contract uses the `Ownable` pattern from OpenZeppelin, giving control over the swap fee percentage to the owner.
-- **VaultGuard**: This ensures that only the Balancer vault can interact with the hooks.
+- **Ownable**: The contract uses the OpenZeppelin `Ownable` pattern, allowing the owner to perform critical actions like creating proposals and implementing them.
+- **VaultGuard**: The contract ensures that only the Balancer Vault can trigger certain functions.
+- **Governance Voting**: Users can participate in governance by voting on proposals to adjust the lottery parameters.
 
 ## 🔍 Functions Overview
 
-| Function                   | Description                                                                             |
-| -------------------------- | --------------------------------------------------------------------------------------- |
-| `onRegister`               | Registers the hook with the Balancer vault.                                             |
-| `getHookFlags`             | Returns the flags that enable the hook's adjusted amounts and the call after swap.      |
-| `onAfterSwap`              | Executes after each swap, applying fees and triggering the lottery mechanism.           |
-| `setHookSwapFeePercentage` | Allows the owner to set the swap fee percentage.                                        |
-| `getRandomNumber`          | Returns the current random number generated for the lottery mechanism.                  |
-| `_chargeFeeOrPayWinner`    | Internal function that charges the fee or pays the winner if they hit the lucky number. |
+| Function                   | Description                                                                            |
+| -------------------------- | -------------------------------------------------------------------------------------- |
+| `onRegister`               | Registers the hook with a Balancer pool.                                               |
+| `getHookFlags`             | Returns flags to enable the hook's adjusted amounts and trigger the call after a swap. |
+| `onAfterSwap`              | Executes after each swap, applying fees and triggering the lottery mechanism.          |
+| `createProposal`           | Creates a new governance proposal for changing the swap fee or lucky number.           |
+| `voteOnProposal`           | Allows users to vote on a proposal.                                                    |
+| `implementProposal`        | Implements a governance proposal if it has enough support.                             |
+| `_chargeFeeOrPayWinner`    | Internal function that either collects the swap fee or pays out a lottery winner.      |
+| `setHookSwapFeePercentage` | Allows the owner to manually set the swap fee percentage.                              |
 
 ## 📦 Deployment
 
 1. **Prerequisites**:
-   - Ensure the Balancer Vault address is known.
-   - Set the address of the trusted router for secure transaction routing.
+   - The contract requires the address of a Balancer Vault.
+   - The address of a **trusted router** must be specified for lottery participation.
 
 2. **Deploying the Contract**:
 
@@ -122,17 +131,18 @@ address router = trustedRouterAddress;
 GovernedLotteryHook lotteryHook = new GovernedLotteryHook(vault, router);
 ```
 
-Once deployed, the contract will start managing swaps and collecting fees, as well as enabling users to participate in the lottery mechanism.
+Once deployed, the contract starts managing swaps, collecting fees, and enabling users to participate in the lottery and governance system.
 
 ## ⚠️ Important Notes
 
-- **Owner Controls**: Only the contract owner can change the swap fee percentage.
-- **Randomness**: The random number generation is based on the `block.prevrandao` and an internal counter. While this provides basic randomness, it may not be fully secure in highly adversarial environments.
-- **Accrued Fees**: The contract accumulates fees until a user wins the lottery, so ensure the contract has sufficient funds to handle payouts.
+- **Owner-Managed Governance**: While the contract supports proposals and voting, the owner retains the ability to implement proposals and set swap fees.
+- **Random Number Generation**: The random number for the lottery is generated using `block.prevrandao` and an internal counter. This provides basic randomness but may not be secure in highly adversarial environments.
+- **Accrued Fees**: The contract accumulates fees over time until a user wins the lottery, so it must maintain a balance to support future payouts.
 
 ## 📜 Events
 
-- **LotteryHookExampleRegistered**: Emitted when the contract is registered as a hook for a pool.
-- **HookSwapFeePercentageChanged**: Emitted when the owner changes the fee percentage.
-- **LotteryFeeCollected**: Emitted when a swap fee is collected.
-- **LotteryWinningsPaid**: Emitted when a user wins the lottery, along with the amount and token paid out.
+- **ProposalCreated**: Emitted when a new governance proposal is created.
+- **VoteCast**: Emitted when a user casts a vote on a proposal.
+- **ProposalImplemented**: Emitted when a proposal is successfully implemented.
+- **LotteryWinningsPaid**: Emitted when a user wins the lottery, with details of the token and amount won.
+
