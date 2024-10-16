@@ -1,158 +1,138 @@
 
-# SafeSwap
 
-SafeSwap is a decentralized automated market maker (AMM) built on the Balancer V3 protocol. It enables liquidity providers to add and remove liquidity in a pool while allowing users to swap between tokens. Additionally, SafeSwap introduces a unique discount mechanism for users holding a specific token, providing them with a 10% discount on swap fees.
+# 🎲 GovernedLotteryHook Contract
 
-## Key Features
+The `GovernedLotteryHook` is a smart contract built on top of the Balancer V3 protocol to act as a customizable fee hook during token swaps. The unique feature of this contract is the lottery mechanism embedded into its logic. Whenever a swap happens, there's a chance for users to win accumulated fees if a lucky number is drawn.
 
-- **Balancer V3 Integration**: Built on top of the Balancer V3 protocol with BalancerPoolToken, allowing flexible pool operations.
-- **Custom Liquidity Operations**: Custom hooks for adding and removing liquidity.
-- **Discount on Swap Fees**: Users holding a specific ERC-20 token are eligible for a 10% discount on the swap fee.
-- **Optimized Fee Structure**: The contract enforces a swap fee between 0% and 10%, with a default fee of 10%, reduced if the user qualifies for a discount.
+## 🔑 Key Features
 
-## Contract Structure
+- **Swap Fee Hook**: A fee can be applied to every swap, with adjustable percentages controlled by the contract owner.
+- **Lottery Mechanism**: For every swap, a random number is drawn. If the number matches the predefined lucky number, the user wins the accumulated fees.
+- **Trusted Router**: Only swaps routed through a trusted router are eligible for the lottery.
+- **Accrued Fees**: Accrued fees are stored in the contract until a lottery winner is drawn.
 
-### SafeSwap
+## 📝 Contract Summary
 
-The `SafeSwap` contract extends the Balancer V3 pool functionality with added customization for liquidity and swaps:
+This contract implements several key features using Balancer’s `IHooks` and integrates with a trusted router for secure transactions. Below is a detailed breakdown of the main functionality.
 
-- **Discount Token**: The contract allows setting a discount token, an ERC-20 token. Users holding this token in their wallets receive a reduced swap fee.
-- **Swap Fee Logic**: The default swap fee is 10%, which can be reduced by 10% (i.e., down to 9%) if the user holds the discount token.
-- **Custom Liquidity Hooks**: Implementations for custom liquidity operations (`onAddLiquidityCustom` and `onRemoveLiquidityCustom`).
-
-### Key Functions
-
-1. **`onSwap`**: Executes a token swap within the pool. If the user holds the discount token, they receive a 10% discount on the swap fee.
-   - Parameters:
-     - `params`: Pool swap parameters, including token balances and amounts.
-   - Returns:
-     - `amountCalculatedScaled18`: The calculated amount for the swap, adjusted for the discounted swap fee.
-
-2. **`computeInvariant`**: Calculates the pool's invariant based on the current token balances.
-
-3. **`onAddLiquidityCustom`**: Custom implementation for adding liquidity to the pool.
-   - Returns:
-     - `amountsInScaled18`: Amount of tokens being added to the pool.
-     - `bptAmountOut`: Calculated pool token (BPT) amount the user receives.
-     - `swapFeeAmountsScaled18`: The swap fee charged for each token.
-
-4. **`onRemoveLiquidityCustom`**: Custom implementation for removing liquidity from the pool.
-   - Returns:
-     - `bptAmountIn`: Amount of pool tokens (BPT) burned.
-     - `amountsOutScaled18`: Amount of tokens the user receives.
-     - `swapFeeAmountsScaled18`: The swap fee charged for each token.
-
-### Discount Logic
-
-The discount logic checks whether the user holds a specific ERC-20 token (the "discount token"). If the user holds this token, they are eligible for a 10% discount on the swap fee.
-
-### Constructor Parameters
-
-The `SafeSwap` contract constructor takes the following parameters:
-
-1. **`IVault vault`**: The Balancer Vault that manages the pool.
-2. **`string name`**: Name of the pool token (BPT).
-3. **`string symbol`**: Symbol of the pool token (BPT).
-4. **`address discountToken`**: The address of the ERC-20 token that provides users with the discount on swap fees.
-
-### Deployment
-
-To deploy the contract, provide the following arguments to the constructor:
+### ⚙️ Constructor
 
 ```solidity
-constructor(
-    IVault vault,
-    string memory name,
-    string memory symbol,
-    address _discountToken
-)
+constructor(IVault vault, address router) VaultGuard(vault) Ownable(msg.sender)
 ```
 
-- **`vault`**: Address of the Balancer Vault.
-- **`name`**: The name of the Balancer Pool Token (BPT).
-- **`symbol`**: The symbol of the Balancer Pool Token (BPT).
-- **`_discountToken`**: Address of the ERC-20 token that gives users a swap fee discount.
+- **VaultGuard**: The contract is built around the Balancer vault system.
+- **Router**: The `router` address is set as the trusted router, which ensures that swaps from specific routes are the only ones eligible for the lottery mechanism.
 
-### Example
+### 🔄 Hook-Related Functions
 
-Deploying the `SafeSwap` contract:
+#### `onRegister`
 
 ```solidity
-SafeSwap safeSwap = new SafeSwap(
-    vaultAddress,
-    "SafeSwap Pool Token",
-    "SSPT",
-    discountTokenAddress
-);
+function onRegister(
+    address,
+    address pool,
+    TokenConfig[] memory,
+    LiquidityManagement calldata
+) public override onlyVault returns (bool)
 ```
 
-### Swap Fee Discount Example
+This function is called when the hook is registered with a pool. It emits an event to confirm registration.
 
-If a user holds the specified `discountToken`, they will receive a 10% discount on the swap fee:
-
-- Default swap fee: 10%
-- Discounted swap fee: 9% (if the user holds the discount token)
-
-## Installation
-
-To install and run the SafeSwap contract, follow these steps:
-
-1. Clone the repository:
-
-```bash
-git clone https://github.com/your-repo/safeswap.git
-```
-
-2. Install dependencies:
-
-```bash
-npm install
-```
-
-3. Compile the contracts:
-
-```bash
-npx hardhat compile
-```
-
-4. Run tests:
-
-```bash
-npx hardhat test
-```
-
-## Usage
-
-Once deployed, users can interact with the `SafeSwap` contract to:
-
-1. **Swap tokens** using the `onSwap` function.
-2. **Add liquidity** with the `onAddLiquidityCustom` function.
-3. **Remove liquidity** with the `onRemoveLiquidityCustom` function.
-
-### Interacting with the Contract
-
-#### Swap Tokens
-
-To execute a swap, call the `onSwap` function:
+#### `onAfterSwap`
 
 ```solidity
-safeSwap.onSwap(swapParams);
+function onAfterSwap(
+    AfterSwapParams calldata params
+) public override onlyVault returns (bool success, uint256 hookAdjustedAmountCalculatedRaw)
 ```
 
-If the user holds the discount token, the swap fee will automatically be reduced.
+- **AfterSwap Logic**: This is the core of the contract. It applies fees on swaps and triggers the lottery mechanism.
+- **Lottery**: Each time a swap is executed, a random number is generated. If the random number matches the lucky number, the user wins the accrued fees stored in the contract.
+- **Fee Collection**: The contract collects a swap fee (if set) for every transaction and stores it in the `_tokensWithAccruedFees` map for potential winners.
 
-#### Add Liquidity
+### 💸 Fees & Lottery
 
-To add liquidity, call the `onAddLiquidityCustom` function:
+#### `setHookSwapFeePercentage`
 
 ```solidity
-safeSwap.onAddLiquidityCustom(router, maxAmountsInScaled18, minBptAmountOut, balancesScaled18, userData);
+function setHookSwapFeePercentage(uint64 swapFeePercentage) external onlyOwner
 ```
 
-#### Remove Liquidity
+This function allows the contract owner to set the swap fee percentage (in basis points). The fees will be collected on every swap, and the amount collected can be adjusted.
 
-To remove liquidity, call the `onRemoveLiquidityCustom` function:
+#### `getRandomNumber`
 
 ```solidity
-safeSwap.onRemoveLiquidityCustom(router, maxBptAmountIn, minAmountsOutScaled18, balancesScaled18, userData);
+function getRandomNumber() external view returns (uint8)
 ```
+
+This view function returns the generated random number used in the lottery system. This random number is based on the block's randomness and the internal counter.
+
+#### `_chargeFeeOrPayWinner`
+
+```solidity
+function _chargeFeeOrPayWinner(
+    address router,
+    uint8 drawnNumber,
+    IERC20 token,
+    uint256 hookFee
+) private returns (uint256)
+```
+
+- If the drawn number matches the lucky number, the user wins the accumulated fees.
+- If the drawn number does not match, the accrued fees are stored in `_tokensWithAccruedFees`, and the hook fee is sent to the contract.
+
+### 🎰 Lottery Parameters
+
+- **LUCKY_NUMBER**: `10` – The predefined lucky number.
+- **MAX_NUMBER**: `20` – The range of possible numbers (1 to 20).
+- **hookSwapFeePercentage**: The fee applied to each swap, which can be adjusted by the owner.
+
+### 🔐 Security & Access Control
+
+The contract is owned by a single owner (set during deployment), who can adjust the fee percentage.
+
+- **Ownable**: The contract uses the `Ownable` pattern from OpenZeppelin, giving control over the swap fee percentage to the owner.
+- **VaultGuard**: This ensures that only the Balancer vault can interact with the hooks.
+
+## 🔍 Functions Overview
+
+| Function                   | Description                                                                             |
+| -------------------------- | --------------------------------------------------------------------------------------- |
+| `onRegister`               | Registers the hook with the Balancer vault.                                             |
+| `getHookFlags`             | Returns the flags that enable the hook's adjusted amounts and the call after swap.      |
+| `onAfterSwap`              | Executes after each swap, applying fees and triggering the lottery mechanism.           |
+| `setHookSwapFeePercentage` | Allows the owner to set the swap fee percentage.                                        |
+| `getRandomNumber`          | Returns the current random number generated for the lottery mechanism.                  |
+| `_chargeFeeOrPayWinner`    | Internal function that charges the fee or pays the winner if they hit the lucky number. |
+
+## 📦 Deployment
+
+1. **Prerequisites**:
+   - Ensure the Balancer Vault address is known.
+   - Set the address of the trusted router for secure transaction routing.
+
+2. **Deploying the Contract**:
+
+```solidity
+IVault vault = IVault(vaultAddress);
+address router = trustedRouterAddress;
+
+GovernedLotteryHook lotteryHook = new GovernedLotteryHook(vault, router);
+```
+
+Once deployed, the contract will start managing swaps and collecting fees, as well as enabling users to participate in the lottery mechanism.
+
+## ⚠️ Important Notes
+
+- **Owner Controls**: Only the contract owner can change the swap fee percentage.
+- **Randomness**: The random number generation is based on the `block.prevrandao` and an internal counter. While this provides basic randomness, it may not be fully secure in highly adversarial environments.
+- **Accrued Fees**: The contract accumulates fees until a user wins the lottery, so ensure the contract has sufficient funds to handle payouts.
+
+## 📜 Events
+
+- **LotteryHookExampleRegistered**: Emitted when the contract is registered as a hook for a pool.
+- **HookSwapFeePercentageChanged**: Emitted when the owner changes the fee percentage.
+- **LotteryFeeCollected**: Emitted when a swap fee is collected.
+- **LotteryWinningsPaid**: Emitted when a user wins the lottery, along with the amount and token paid out.
