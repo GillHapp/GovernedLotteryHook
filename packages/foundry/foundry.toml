@@ -1,22 +1,27 @@
 [profile.default]
-src = 'contracts'
-out = 'out'
-libs = ['node_modules', 'lib']
-test = 'test'
-ffi = true
-solc_version = '0.8.24'
 auto_detect_solc = false
 evm_version = 'cancun'
+ffi = true
+fs_permissions = [{access = "read-write", path = "./"}] # SE-2 default to allow script to write contract info from /foundry to /nextjs
 ignored_error_codes = [2394] # Transient storage
-fs_permissions = [{ access = "read-write", path = "./"}] # SE-2 default to allow script to write contract info from /foundry to /nextjs
-
+libs = ['node_modules', 'lib']
+out = 'out'
+solc_version = '0.8.24'
+src = 'contracts'
+test = 'test'
 
 [rpc_endpoints]
 default_network = "http://127.0.0.1:8545"
 localhost = "http://127.0.0.1:8545"
 sepolia = "${SEPOLIA_RPC_URL}"
 
-
+# [remapping]
+# @balancer-labs/v3-pool-weighted/=lib/balancer-v3-monorepo/pkg/pool-weighted/
+# @balancer-labs/v3-vault/=lib/balancer-v3-monorepo/pkg/vault/
+# permit2/=lib/permit2/
+# forge-gas-snapshot/=node_modules/forge-gas-snapshot/src/
+# forge-gas-snapshot/=lib/permit2/lib/forge-gas-snapshot/src
+# @openzeppelin/=lib/openzeppelin-contracts/
 # [etherscan]
 # polygonMumbai = { key = "${ETHERSCAN_API_KEY}" }
 # sepolia = { key = "${ETHERSCAN_API_KEY}" }
